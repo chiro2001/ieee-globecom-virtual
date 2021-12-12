@@ -1,3 +1,4 @@
+import os
 import requests
 import pymongo
 from bs4 import BeautifulSoup as Soup
@@ -13,17 +14,18 @@ import requests_cache
 from requests_cache import CachedSession
 
 session = CachedSession(
-    'demo_cache',
+    os.path.join(os.path.join(os.environ.get('userprofile', '~'), '.requests_cache'), 'globecom_cache'),
     use_cache_dir=True,  # Save files in the default user cache dir
-    cache_control=True,  # Use Cache-Control headers for expiration, if available
+    cache_control=False,  # Use Cache-Control headers for expiration, if available
     expire_after=timedelta(days=3),  # Otherwise expire responses after one day
-    allowable_methods=['GET', 'POST'],  # Cache POST requests to avoid sending the same data twice
+    allowable_methods=['GET', 'POST'],
+    # Cache POST requests to avoid sending the same data twice
     allowable_codes=[200, 400],  # Cache 400 responses as a solemn reminder of your failures
-    ignored_parameters=['api_key'],  # Don't match this param or save it in the cache
+    ignored_parameters=['api_key', '.pdf'],  # Don't match this param or save it in the cache
     match_headers=False,  # Match all request headers
-    stale_if_error=True,  # In case of request errors, use stale cache data if possible
+    stale_if_error=True  # In case of request errors, use stale cache data if possible)
 )
-requests_cache.install_cache('demo_cache')
+
 url_prefix = 'https://ieee-globecom-virtual.org'
 
 
@@ -48,7 +50,7 @@ def test_fetch_symposium_paper():
         except IndexError:
             logger.error("card: " + card.get_text().replace('\n', ' ') + " failed!")
 
-    resp = requests.get('https://ieee-globecom-virtual.org/type/symposium-paper', headers={"Cookie": secrets.COOKIE})
+    resp = session.get('https://ieee-globecom-virtual.org/type/symposium-paper', headers={"Cookie": secrets.COOKIE})
     soup = Soup(resp.content, "html.parser")
     symposium_papers = get_paper_list(soup)
     db.symposium_paper.update_by_title(symposium_papers)
@@ -75,7 +77,7 @@ def test_parse_symposiums():
 
     def parse_symposium(symposium: dict):
         # logger.info(f"{symposium.get('title')}")
-        resp = requests.get(symposium.get('url'), headers={"Cookie": secrets.COOKIE})
+        resp = session.get(symposium.get('url'), headers={"Cookie": secrets.COOKIE})
         soup = Soup(resp.content, "html.parser")
         presentations = get_paper_list(soup)
         presentations = [{"symposium": symposium.get('title'), **p} for p in presentations]
@@ -91,7 +93,7 @@ def test_parse_symposiums():
 def test_parse_presentations():
     def parse_presentation(presentation: dict):
         # logger.info(f"{presentation.get('title')}")
-        resp = requests.get(presentation.get('url'), headers={"Cookie": secrets.COOKIE})
+        resp = session.get(presentation.get('url'), headers={"Cookie": secrets.COOKIE})
         soup = Soup(resp.content, "html.parser")
 
         # Find abstract
@@ -117,7 +119,29 @@ def test_parse_presentations():
     logger.info(f"Done")
 
 
+def test_generate_list():
+    symposiums_all = db.symposium_paper.find({})
+    types = list(set([f"{s.get('type')}" for s in symposiums_all]))
+    types.sort()
+    res_all = ""
+    for t in types:
+        symposiums = db.symposium_paper.find({'type': t})
+        res = "\\section{%s}\n" % t
+        for symposium in symposiums:
+            res = res + "\\subsection{%s}\n" % symposium.get('title')
+            presentations = db.presentations.find({'symposium': symposium.get('title')})
+            for presentation in presentations:
+                res = res + "\\subsubsection{%s}\n" % presentation.get('title')
+                presentation_info_list: list = db.presentation_info.find({'title': presentation.get('title')})
+                presentation_info: dict = presentation_info_list[0] if len(presentation_info_list) > 0 else {}
+                res = res + "abstract:%s\n" % presentation_info.get('abstract', 'None').replace('\n', '')
+        res_all = res_all + res
+    with open('result.tex', 'w', encoding='utf8') as f:
+        f.write(res_all)
+
+
 if __name__ == '__main__':
     # test_fetch_symposium_paper()
     # test_parse_symposiums()
-    test_parse_presentations()
+    # test_parse_presentations()
+    test_generate_list()
