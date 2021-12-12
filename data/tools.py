@@ -88,7 +88,7 @@ def tree_update_path(tree: dict, path: str = None, splits: list = None):
     if len(splits) == 1:
         tree[splits[0]] = None
     if tree[splits[0]] is not None:
-        tree[splits[0]].update(tree_update_path(tree[splits[0]], splits=splits[1:]))
+        tree[splits[0]].update_by_title(tree_update_path(tree[splits[0]], splits=splits[1:]))
     else:
         return tree
     return tree

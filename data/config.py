@@ -14,7 +14,7 @@ class Constants:
     ENVIRONMENT = os.environ.get("ENV") if os.environ.get("ENV") is not None else (
         "release" if platform.system() == 'Linux' else "dev")
     # Database
-    FIND_LIMIT = 30
+    FIND_LIMIT = 30000
     DATABASE_URI = ''
     DATABASE_NAME = 'globecom'
     RUN_REBASE = False

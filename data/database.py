@@ -15,6 +15,7 @@ class DataBase:
         self.db = None
         self.symposium_paper: SymposiumPaperDB = None
         self.presentations: Presentations = None
+        self.presentation_info: PresentationInfo = None
         self.connect_init()
         self.init_parts()
         if Constants.RUN_REBASE:
@@ -23,6 +24,7 @@ class DataBase:
     def init_parts(self):
         self.symposium_paper = SymposiumPaperDB(self.db)
         self.presentations = Presentations(self.db)
+        self.presentation_info = PresentationInfo(self.db)
 
     def rebase(self):
         logger.warning('Rebasing...')
@@ -33,8 +35,8 @@ class DataBase:
         # for col in SquareDB.recorded_col_name:
         #     self.db[col].drop()
         self.init_parts()
-        uid = self.user.update(Constants.USERS_DEFAULT)
-        self.session.update(uid=uid, password=Constants.USERS_DEFAULT_PASSWORD)
+        uid = self.user.update_by_title(Constants.USERS_DEFAULT)
+        self.session.update_by_title(uid=uid, password=Constants.USERS_DEFAULT_PASSWORD)
 
     def connect_init(self):
         if len(Constants.DATABASE_URI) > 0:

@@ -6,7 +6,7 @@ class MultiUpdateDB(BaseDB):
     def __init__(self, d, col_name):
         super().__init__(d, col_name)
 
-    def update(self, data: Union[List[Dict], Dict]):
+    def update_by_title(self, data: Union[List[Dict], Dict]):
         if not isinstance(data, list):
             data = [data, ]
         for d in data:
@@ -24,3 +24,8 @@ class SymposiumPaperDB(MultiUpdateDB):
 class Presentations(MultiUpdateDB):
     def __init__(self, d):
         super(Presentations, self).__init__(d, 'presentations')
+
+
+class PresentationInfo(MultiUpdateDB):
+    def __init__(self, d):
+        super(PresentationInfo, self).__init__(d, 'presentation_info')
