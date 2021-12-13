@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import pymongo
 from bs4 import BeautifulSoup as Soup
@@ -8,6 +9,7 @@ from utils.logger import logger
 from data.database import db
 from tqdm import trange
 import secrets
+from requests_toolbelt import threaded
 
 from datetime import timedelta
 import requests_cache
@@ -102,8 +104,8 @@ def test_parse_presentations():
 
         # Find papers & slides link
         download_buttons: List[Tag] = soup.find_all("a", attrs={"type": "button", "data-action": "Download"})
-        slides: List[Tag] = [a for a in download_buttons if 'papers' in a.attrs.get('href')]
-        papers: List[Tag] = [a for a in download_buttons if 'slides' in a.attrs.get('href')]
+        slides: List[Tag] = [a for a in download_buttons if 'slides' in a.attrs.get('href')]
+        papers: List[Tag] = [a for a in download_buttons if 'papers' in a.attrs.get('href')]
 
         presentation_info = {
             "title": presentation.get('title'),
@@ -140,8 +142,114 @@ def test_generate_list():
         f.write(res_all)
 
 
+def test_fix_papers_slides():
+    presentations_info: List[Dict] = db.presentation_info.find({})
+    for i in trange(len(presentations_info)):
+        presentation_info = presentations_info[i]
+        papers = presentation_info.get('papers')
+        slides = presentation_info.get('slides')
+        presentation_info['slides'] = papers
+        presentation_info['papers'] = slides
+        db.presentation_info.update_by_title(presentation_info)
+
+
+def replace_symbols(p: str, replace: str = '_') -> str:
+    symbols = "/\\*#$@!\"<>?|:"
+    for s in symbols:
+        p = p.replace(s, replace)
+    return p
+
+
+def test_download():
+    if not os.path.exists("download"):
+        os.mkdir("download")
+    symposiums_all = db.symposium_paper.find({})
+    types = list(set([f"{s.get('type')}" for s in symposiums_all]))
+    types.sort()
+    if not os.path.exists('download_list.json'):
+        download_list = []
+        logger.info(f"generating download list...")
+        for i in trange(len(types)):
+            t = types[i]
+            path_type = os.path.join("download", replace_symbols(t))
+            if not os.path.exists(path_type):
+                os.mkdir(path_type)
+            symposiums = db.symposium_paper.find({'type': t})
+            for symposium in symposiums:
+                path_symposium = os.path.join(path_type, replace_symbols(symposium.get('title')))
+                if not os.path.exists(path_symposium):
+                    os.mkdir(path_symposium)
+                presentations = db.presentations.find({'symposium': symposium.get('title')})
+                for presentation in presentations:
+                    presentation_info_list: list = db.presentation_info.find({'title': presentation.get('title')})
+                    presentation_info: dict = presentation_info_list[0] if len(presentation_info_list) > 0 else {}
+                    title = presentation_info.get("title")
+                    if title is None:
+                        logger.warning(f"Info err: {presentation}")
+                        continue
+                    path_presentation = os.path.join(path_type, replace_symbols(replace_symbols(title)))
+                    if not os.path.exists(path_presentation):
+                        os.mkdir(path_presentation)
+                    papers = presentation_info.get('papers')
+                    slides = presentation_info.get('slides')
+
+                    def get_download_list(download_type: str, data: list):
+                        if len(data) == 0:
+                            return
+                        paths_data = os.path.join(path_presentation, download_type)
+                        if not os.path.exists(paths_data):
+                            os.mkdir(paths_data)
+                        for index in range(len(paths_data)):
+                            url = paths_data[index]
+                            ext = url.split('.')[-1]
+                            filename = f"{replace_symbols(title)}{('(%s)' % str(index)) if len(paths_data) > 1 else ''}.{ext}"
+                            filepath = os.path.join(paths_data, filename)
+                            download_info = {
+                                'title': title,
+                                'filepath': filepath,
+                                'url': url,
+                                'ext': ext,
+                                'type': download_type
+                            }
+                            if len(db.downloaded.find(
+                                    {'title': download_info['title'], 'type': download_info['type']})) == 0:
+                                download_list.append(download_info)
+                            else:
+                                logger.info(f"Fin {download_type}: {title}")
+
+                    get_download_list('papers', papers)
+                    get_download_list('slides', slides)
+        with open('download_list.json', 'w', encoding='utf8') as f:
+            json.dump({'data': download_list}, f)
+    else:
+        with open('download_list.json', 'r', encoding='utf8') as f:
+            download_list = json.load(f).get('data')
+
+    def save_download(information: dict, data: bytes):
+        with open(information.get('filepath'), 'wb') as f:
+            f.write(data)
+
+    # print(download_list)
+    logger.info(f"{len(download_list)} tasks!")
+    download_map = {d['url']: d for d in download_list}
+    requests_list = [{'method': 'GET', 'url': d['url']} for d in download_list[:1]]
+    responses_generator, exceptions_generator = threaded.map(requests_list)
+    for response in responses_generator:
+        url = request_kwargs['url']
+        info = download_map.get(url)
+        if info is None:
+            logger.error(f"err resp!")
+            continue
+        logger.info(str(info))
+        # save_download(info, b'')
+
+
+
+
 if __name__ == '__main__':
     # test_fetch_symposium_paper()
     # test_parse_symposiums()
     # test_parse_presentations()
-    test_generate_list()
+    # test_generate_list()
+    # test_fix_papers_slides()
+    test_download()

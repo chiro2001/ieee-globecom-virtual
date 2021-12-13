@@ -48,7 +48,10 @@ def auto_time_update(col: pymongo.collection.Collection,
                      filter_dict: dict, update_dict: dict):
     dt0 = datetime.datetime.utcnow()
     update_dict['updated_at'] = dt0
-    update_dict = {'$set': update_dict, '$setOnInsert': {'created_at': dt0}}
+    if 'create_at' in update_dict:
+        update_dict = {'$set': update_dict, '$setOnInsert': {'created_at': dt0}}
+    else:
+        update_dict = {'$set': update_dict}
     return col.update_one(filter_dict, update_dict, upsert=True)
 
 

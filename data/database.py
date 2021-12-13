@@ -16,6 +16,7 @@ class DataBase:
         self.symposium_paper: SymposiumPaperDB = None
         self.presentations: Presentations = None
         self.presentation_info: PresentationInfo = None
+        self.downloaded: Downloaded = None
         self.connect_init()
         self.init_parts()
         if Constants.RUN_REBASE:
@@ -25,6 +26,7 @@ class DataBase:
         self.symposium_paper = SymposiumPaperDB(self.db)
         self.presentations = Presentations(self.db)
         self.presentation_info = PresentationInfo(self.db)
+        self.downloaded = Downloaded(self.db)
 
     def rebase(self):
         logger.warning('Rebasing...')

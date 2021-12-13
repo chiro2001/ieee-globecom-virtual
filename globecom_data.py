@@ -29,3 +29,8 @@ class Presentations(MultiUpdateDB):
 class PresentationInfo(MultiUpdateDB):
     def __init__(self, d):
         super(PresentationInfo, self).__init__(d, 'presentation_info')
+
+
+class Downloaded(MultiUpdateDB):
+    def __init__(self, d):
+        super(Downloaded, self).__init__(d, 'downloaded')
