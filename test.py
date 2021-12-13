@@ -32,8 +32,8 @@ url_prefix = 'https://ieee-globecom-virtual.org'
 
 
 def test_fetch_symposium_paper():
-    def get_paper_list(soup: Soup):
-        cards = soup.find_all("div", class_="card")
+    def get_paper_list(s: Soup):
+        cards = s.find_all("div", class_="card")
         logger.info(f"{len(cards)} cards!")
         cards_info = [parse_symposium_item(card) for card in cards]
         return cards_info
@@ -166,84 +166,90 @@ def test_download():
     symposiums_all = db.symposium_paper.find({})
     types = list(set([f"{s.get('type')}" for s in symposiums_all]))
     types.sort()
-    if not os.path.exists('download_list.json'):
-        download_list = []
-        logger.info(f"generating download list...")
-        for i in trange(len(types)):
-            t = types[i]
-            path_type = os.path.join("download", replace_symbols(t))
-            if not os.path.exists(path_type):
-                os.mkdir(path_type)
-            symposiums = db.symposium_paper.find({'type': t})
-            for symposium in symposiums:
-                path_symposium = os.path.join(path_type, replace_symbols(symposium.get('title')))
-                if not os.path.exists(path_symposium):
-                    os.mkdir(path_symposium)
-                presentations = db.presentations.find({'symposium': symposium.get('title')})
-                for presentation in presentations:
-                    presentation_info_list: list = db.presentation_info.find({'title': presentation.get('title')})
-                    presentation_info: dict = presentation_info_list[0] if len(presentation_info_list) > 0 else {}
-                    title = presentation_info.get("title")
-                    if title is None:
-                        logger.warning(f"Info err: {presentation}")
-                        continue
-                    path_presentation = os.path.join(path_type, replace_symbols(replace_symbols(title)))
-                    if not os.path.exists(path_presentation):
-                        os.mkdir(path_presentation)
-                    papers = presentation_info.get('papers')
-                    slides = presentation_info.get('slides')
+    download_list = []
+    logger.info(f"generating download list...")
+    for i in trange(len(types)):
+        t = types[i]
+        path_type = os.path.join("download", replace_symbols(t))
+        if not os.path.exists(path_type):
+            os.mkdir(path_type)
+        symposiums = db.symposium_paper.find({'type': t})
+        for symposium in symposiums:
+            path_symposium = os.path.join(path_type, replace_symbols(symposium.get('title')))
+            if not os.path.exists(path_symposium):
+                os.mkdir(path_symposium)
+            presentations = db.presentations.find({'symposium': symposium.get('title')})
+            for presentation in presentations:
+                presentation_info_list: list = db.presentation_info.find({'title': presentation.get('title')})
+                presentation_info: dict = presentation_info_list[0] if len(presentation_info_list) > 0 else {}
+                title = presentation_info.get("title")
+                if title is None:
+                    logger.warning(f"Info err: {presentation}")
+                    continue
+                path_presentation = os.path.join(path_symposium, replace_symbols(replace_symbols(title)))
+                if not os.path.exists(path_presentation):
+                    os.mkdir(path_presentation)
+                papers = presentation_info.get('papers')
+                slides = presentation_info.get('slides')
 
-                    def get_download_list(download_type: str, data: list):
-                        if len(data) == 0:
-                            return
-                        paths_data = os.path.join(path_presentation, download_type)
-                        if not os.path.exists(paths_data):
-                            os.mkdir(paths_data)
-                        for index in range(len(paths_data)):
-                            url = paths_data[index]
-                            ext = url.split('.')[-1]
-                            filename = f"{replace_symbols(title)}{('(%s)' % str(index)) if len(paths_data) > 1 else ''}.{ext}"
-                            filepath = os.path.join(paths_data, filename)
-                            download_info = {
-                                'title': title,
-                                'filepath': filepath,
-                                'url': url,
-                                'ext': ext,
-                                'type': download_type
-                            }
-                            if len(db.downloaded.find(
-                                    {'title': download_info['title'], 'type': download_info['type']})) == 0:
-                                download_list.append(download_info)
-                            else:
-                                logger.info(f"Fin {download_type}: {title}")
+                def get_download_list(download_type: str, data: list):
+                    if len(data) == 0:
+                        return
+                    paths_data = os.path.join(path_presentation, download_type)
+                    if not os.path.exists(paths_data):
+                        os.mkdir(paths_data)
+                    for index in range(len(data)):
+                        url = data[index]
+                        # ext = url.split('.')[-1]
+                        ext = 'pdf'
+                        filename = f"{replace_symbols(title)}{('(%s)' % str(index)) if len(data) > 1 else ''}.{ext}"
+                        filepath = os.path.join(paths_data, filename)
+                        download_info = {
+                            'title': title,
+                            'filepath': filepath,
+                            'url': url,
+                            'ext': ext,
+                            'type': download_type
+                        }
+                        if len(db.downloaded.find(
+                                {'title': download_info['title'], 'type': download_info['type']})) == 0 \
+                                and not os.path.exists(filepath):
+                            download_list.append(download_info)
+                        else:
+                            logger.info(f"Fin {download_type}: {title}")
+                            db.downloaded.update_by_title(download_info)
 
-                    get_download_list('papers', papers)
-                    get_download_list('slides', slides)
-        with open('download_list.json', 'w', encoding='utf8') as f:
-            json.dump({'data': download_list}, f)
-    else:
-        with open('download_list.json', 'r', encoding='utf8') as f:
-            download_list = json.load(f).get('data')
+                get_download_list('papers', papers)
+                get_download_list('slides', slides)
 
     def save_download(information: dict, data: bytes):
-        with open(information.get('filepath'), 'wb') as f:
-            f.write(data)
+        with open(information.get('filepath'), 'wb') as f_write:
+            f_write.write(data)
 
     # print(download_list)
     logger.info(f"{len(download_list)} tasks!")
     download_map = {d['url']: d for d in download_list}
-    requests_list = [{'method': 'GET', 'url': d['url']} for d in download_list[:1]]
-    responses_generator, exceptions_generator = threaded.map(requests_list)
+    requests_list = [{'method': 'GET', 'url': d['url']} for d in download_list]
+    if len(requests_list) == 0:
+        logger.info(f"No task!")
+        return
+
+    def initialize_session(s):
+        session.headers['User-Agent'] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:95.0) Gecko/20100101 Firefox/95.0"
+        return session
+
+    responses_generator, exceptions_generator = threaded.map(requests_list, initializer=initialize_session)
     for response in responses_generator:
-        url = request_kwargs['url']
-        info = download_map.get(url)
+        u = response.request_kwargs['url']
+        info = download_map.get(u)
         if info is None:
             logger.error(f"err resp!")
             continue
-        logger.info(str(info))
-        # save_download(info, b'')
-
-
+        logger.info(f"Done: {info.get('title')}")
+        db.downloaded.update_by_title(info)
+        save_download(info, response.response.content)
+    for e in exceptions_generator:
+        logger.error(f"{e.__class__.__name__}: {e.request_kwargs['url']}")
 
 
 if __name__ == '__main__':
