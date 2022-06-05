@@ -16,7 +16,7 @@ import requests_cache
 from requests_cache import CachedSession
 
 session = CachedSession(
-    os.path.join(os.path.join(os.environ.get('userprofile', '~'), '.requests_cache'), 'globecom_cache'),
+    os.path.join(os.path.join(os.environ.get('userprofile', '~'), '.requests_cache'), 'icc_cache'),
     use_cache_dir=True,  # Save files in the default user cache dir
     cache_control=False,  # Use Cache-Control headers for expiration, if available
     expire_after=timedelta(days=3),  # Otherwise expire responses after one day
@@ -28,12 +28,12 @@ session = CachedSession(
     stale_if_error=True  # In case of request errors, use stale cache data if possible)
 )
 
-url_prefix = 'https://ieee-globecom-virtual.org'
+url_prefix = 'https://ieee-icc-virtual.org'
 
 
 def test_fetch_symposium_paper():
     def get_paper_list(s: Soup):
-        cards = s.find_all("div", class_="card")
+        cards = s.find_all("li", class_="card")
         logger.info(f"{len(cards)} cards!")
         cards_info = [parse_symposium_item(card) for card in cards]
         return cards_info
@@ -52,7 +52,7 @@ def test_fetch_symposium_paper():
         except IndexError:
             logger.error("card: " + card.get_text().replace('\n', ' ') + " failed!")
 
-    resp = session.get('https://ieee-globecom-virtual.org/type/symposium-paper', headers={"Cookie": secrets.COOKIE})
+    resp = session.get('https://ieee-icc-virtual.org/terms/cc_track', headers={"Cookie": secrets.COOKIE})
     soup = Soup(resp.content, "html.parser")
     symposium_papers = get_paper_list(soup)
     db.symposium_paper.update_by_title(symposium_papers)
@@ -253,9 +253,9 @@ def test_download():
 
 
 if __name__ == '__main__':
-    # test_fetch_symposium_paper()
+    test_fetch_symposium_paper()
     # test_parse_symposiums()
     # test_parse_presentations()
     # test_generate_list()
     # test_fix_papers_slides()
-    test_download()
+    # test_download()
